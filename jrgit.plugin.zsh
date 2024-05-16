@@ -217,6 +217,10 @@ function install_code {
 # `~/.gnupg/gpg-agent.conf` file will configure GPG to use pinentry-curses for
 # passphrase entry. This will prompt for passwords in the terminal.
 
+# Adding the line `pinentry-program /usr/bin/gnome-keyring-daemon` to the
+# `~/.gnupg/gpg-agent.conf` file will configure GPG to use gnome-keyring-daemon
+# for passphrase entry. This will prompt for passwords using the GNOME Keyring.
+
 # pinentry-curses is a collection of simple PIN or passphrase entry dialogs
 # which utilize the Assuan protocol as described by the GnuPG project.
 
@@ -247,7 +251,8 @@ function gpg_setup {
   fi
   # configure pinentry-curses, a program that allows GPG to prompt for passwords in the terminal.
   if ! grep -q "pinentry-program" ~/.gnupg/gpg-agent.conf; then
-    echo "pinentry-program /usr/bin/pinentry-curses" >>~/.gnupg/gpg-agent.conf
+    # echo "pinentry-program /usr/bin/pinentry-curses" >>~/.gnupg/gpg-agent.conf
+    echo "pinentry-program /usr/bin/gnome-keyring-daemon" >>~/.gnupg/gpg-agent.conf
   fi
 
   # Restart gpg-agent to apply changes
