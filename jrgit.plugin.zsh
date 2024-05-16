@@ -76,7 +76,7 @@ function core_config {
   # input Unix-style: checkout as-is, commit LF.
   git config --global core.autocrlf input
   # set the default branch name to main instead of master
-  git config --global init.defaultBranch = main
+  git config --global init.defaultBranch main
 
   install_diff_so_fancy
 
