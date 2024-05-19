@@ -226,10 +226,14 @@ function install_code {
 
 function gpg_setup {
 
+  # Install GPG and necessary dependencies
+
   sudo apt-get update
   sudo apt-get install -y gnupg2 gnupg-agent pinentry-curses scdaemon
   sudo apt-get install -y whiptail # user interface tool
   echo "All necessary dependencies are installed."
+
+  # Configure GPG to use pinentry-curses for passphrase entry
 
   local gpg_config_dir="$HOME/.gnupg"
   local gpg_agent_file="$gpg_config_dir/gpg-agent.conf"
@@ -237,44 +241,28 @@ function gpg_setup {
   mkdir -p "$gpg_config_dir" # -p flag creates the directory if it doesn't exist
   touch "$gpg_agent_file" # create the file if it doesn't exist
 
-  # Configure gpg-agent to handle SSH keys
   if ! grep -q "enable-ssh-support" ~/.gnupg/gpg-agent.conf; then
     echo "enable-ssh-support" >>~/.gnupg/gpg-agent.conf
   fi
-  # configure gpg-agent to use the standard socket
-  if ! grep -q "use-standard-socket" ~/.gnupg/gpg-agent.conf; then
-    echo "use-standard-socket" >>~/.gnupg/gpg-agent.conf
-  fi
-  # configure gpg-agent to write the environment variables to a file
-  if ! grep -q "write-env-file" ~/.gnupg/gpg-agent.conf; then
-    echo "write-env-file ~/.gpg-agent-info" >>~/.gnupg/gpg-agent.conf
-  fi
-  # configure pinentry-curses, a program that allows GPG to prompt for passwords in the terminal.
   if ! grep -q "pinentry-program" ~/.gnupg/gpg-agent.conf; then
-    # echo "pinentry-program /usr/bin/pinentry-curses" >>~/.gnupg/gpg-agent.conf
-    echo "pinentry-program /usr/bin/gnome-keyring-daemon" >>~/.gnupg/gpg-agent.conf
+    echo "pinentry-program /usr/bin/pinentry-curses" >>~/.gnupg/gpg-agent.conf
   fi
 
-  # Restart gpg-agent to apply changes
-  gpg-connect-agent reloadagent /bye
+  gpg-connect-agent reloadagent /bye # Restart gpg-agent to apply changes
 
-  # GPG_TTY environment variable: tell GPG which terminal to use for passphrase entry.
+  # Configure GPG/pinentry-curses to use a terminal for passphrase entry
 
-  local line_to_add="export GPG_TTY=\$(tty)"
-
-  if ! grep -qF "$line_to_add" ~/.bashrc; then
-    echo "$line_to_add" >>~/.bashrc
+  if ! grep -qF "export GPG_TTY=\$(tty)" ~/.bashrc; then
+    echo "export GPG_TTY=\$(tty)" >>~/.bashrc
   fi
   if [ -f ~/.zshrc ]; then
-    if ! grep -qF "$line_to_add" ~/.zshrc; then
-      echo "$line_to_add" >>~/.zshrc
+    if ! grep -qF "export GPG_TTY=\$(tty)" ~/.zshrc; then
+      echo "export GPG_TTY=\$(tty)" >>~/.zshrc
     fi
   fi
 
-  # Set SSH to use gpg-agent for authentication
-  export GPG_TTY=$(tty)
-  export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
-  # if gpgconf --list-dirs agent-ssh-socket is not et at .bashrc or .zshrc, add it
+  # Configure GPG to use GNOME Keyring for passphrase entry
+
   if ! grep -q "export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)" ~/.bashrc; then
     echo "export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)" >> ~/.bashrc
   fi
@@ -282,24 +270,46 @@ function gpg_setup {
     echo "export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)" >> ~/.zshrc
   fi
 
-  echo "GPG agent configured to handle SSH keys."
-  
-  # Check if gpg-agent is working for SSH
-  ssh-add -L
+  echo "GPG is configured to use pinentry-curses for passphrase entry."
+
+  # Ensure the GNOME Keyring daemon is started with the necessary components
+
+  if ! grep -qF "eval $(/usr/bin/gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh)" ~/.bashrc; then
+    echo "eval $(/usr/bin/gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh)" >>~/.bashrc
+  fi
+  if [ -f ~/.zshrc ]; then
+    if ! grep -qF "eval $(/usr/bin/gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh)" ~/.zshrc; then
+      echo "eval $(/usr/bin/gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh)" >>~/.zshrc
+    fi
+  fi
+
+  echo "GNOME Keyring daemon is configured to start with the necessary components."
 
   # Source the updated shell configuration files to apply changes
+
   if [ -n "$BASH_VERSION" ]; then
     source ~/.bashrc
   elif [ -n "$ZSH_VERSION" ]; then
     source ~/.zshrc
   fi
 
-  # Set the GPG program to Use
+  echo "Shell configuration files have been sourced."
+  
+  # Check if gpg-agent is working for SSH
+
+  if gpgconf --list-dirs agent-ssh-socket | grep -q "S.gpg-agent.ssh"; then
+    echo "gpg-agent is configured for SSH."
+    echo "Listing the SSH keys added to the SSH agent..."
+    ssh-add -L
+  else
+    echo "gpg-agent is not configured for SSH."
+  fi
+
+  # configure GPG for Git
+
   git config --global gpg.program "gpg"
-  # General configuration for signing commits and tags
   git config --global commit.gpgsign true
   git config --global tag.gpgsign true
-
 
   # Adding a test GPG key and check if it's stored
 
@@ -323,6 +333,11 @@ function gpg_setup {
     fi
   fi
 
+  # change the password for keyring
+
+  # echo "Changing the password for the GNOME Keyring..."
+  # gnome-keyring-daemon --change-password
+  
   # Configuring git to use GPG for signing commits and tags
 
   if ! gpg --list-secret-keys; then
@@ -330,7 +345,7 @@ function gpg_setup {
     generate_gpg_key
   else
     echo "Existing GPG key found. Listing GPG keys..."
-    gpg --list-secret-keys
+    gpg --list-secret-keys --keyid-format LONG
     # Ask for user to select one to config with Git
     echo "Select the GPG key to use for Git commits (16 characters):"
     read key_id
@@ -640,6 +655,6 @@ alias jr_install_code="install_code"   # install VS Code
 alias jr_keyring="use_gnome_keyring"   # use GNOME Keyring
 
 alias jr_gpg_setup="gpg_setup"              # setup GPG for GitHub, Bitbucket, and GitLab
-alias jr_gpg_display="display_gpg_key_info" # display GPG key info
+alias jr_gpg_display="display_gpg_key_info" # display GPG public key
 alias jr_gpg_key_gen="generate_gpg_key"     # generate GPG key
 alias jr_ssh_config="ssh_config"            # configure SSH for GitHub, Bitbucket, and GitLab
